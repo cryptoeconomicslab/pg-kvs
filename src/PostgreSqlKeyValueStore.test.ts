@@ -1,40 +1,91 @@
 import { Client } from 'pg'
-import { PostgreSqlKeyValueStore } from './PostgreSqlKeyValueStore'
+import { ByteUtils, PostgreSqlKeyValueStore } from './PostgreSqlKeyValueStore'
 import { Bytes } from 'wakkanay/dist/types/Codables'
 
 const testDbName = Bytes.fromString('test_pg')
+const testBucket = Bytes.fromString('test_bucket')
 const testKey = Bytes.fromString('test_key')
+const testNotFoundKey = Bytes.fromString('test_not_found_key')
 const testValue = Bytes.fromString('test_value')
+
+const mockQuery = jest
+  .fn()
+  .mockImplementation(async (queryText, queryParams: any[]) => {
+    if (!queryParams) {
+      return
+    }
+    const key: Buffer = queryParams[1]
+    if (
+      ByteUtils.bufferToBytes(key).toHexString() ==
+      testNotFoundKey.toHexString()
+    ) {
+      return {
+        rows: []
+      }
+    } else {
+      return {
+        rows: [
+          {
+            key: ByteUtils.bytesToBuffer(testKey),
+            value: ByteUtils.bytesToBuffer(testValue)
+          }
+        ]
+      }
+    }
+  })
 
 jest.mock('pg', () => {
   return {
     Client: function() {
       return {
         connect: () => {},
-        query: async () => {
-          return {
-            rows: [
-              { key: testKey.toHexString(), value: testValue.toHexString() }
-            ]
-          }
-        }
+        query: mockQuery
       }
     }
   }
 })
 
 describe('PostgreSqlKeyValueStore', () => {
+  let kvs: PostgreSqlKeyValueStore
+  beforeEach(async () => {
+    mockQuery.mockClear()
+    kvs = await PostgreSqlKeyValueStore.open(testDbName)
+  })
   describe('put', () => {
     it('suceed to put', async () => {
-      const kvs = await PostgreSqlKeyValueStore.open(testDbName)
       await kvs.put(testKey, testValue)
+      expect(mockQuery).toHaveBeenCalledTimes(1)
     })
   })
   describe('get', () => {
     it('suceed to get', async () => {
-      const kvs = await PostgreSqlKeyValueStore.open(testDbName)
       const value = await kvs.get(testKey)
       expect(value).toEqual(testValue)
+    })
+    it('get null', async () => {
+      const value = await kvs.get(testNotFoundKey)
+      expect(value).toBeNull()
+    })
+  })
+  describe('bucket', () => {
+    describe('put', () => {
+      it('suceed to put', async () => {
+        const bucket = kvs.bucket(testBucket)
+        await bucket.put(testKey, testValue)
+        expect(mockQuery).toHaveBeenCalledTimes(1)
+      })
+    })
+    describe('get', () => {
+      it('suceed to get', async () => {
+        const bucket = kvs.bucket(testBucket)
+        const value = await bucket.get(testKey)
+        expect(value).toEqual(testValue)
+      })
+      it('get null', async () => {
+        const bucket = kvs.bucket(testBucket)
+        const value = await bucket.get(testNotFoundKey)
+        expect(value).toBeNull()
+      })
     })
   })
 })
