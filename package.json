@@ -2,9 +2,15 @@
   "name": "wakkanay-db-pg",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts"
+  ],
   "scripts": {
-    "test": "jest"
+    "build": "tsc --build ./tsconfig.json",
+    "test": "jest",
+    "prepare": "npm run build"
   },
   "keywords": [
     "plasma"
