@@ -21,16 +21,16 @@ const mockQuery = jest
     return {
       rows: [
         {
-          start: 100,
-          end: 200,
+          range_start: 100,
+          range_end: 200,
           value: ByteUtils.bytesToBuffer(testValue)
         },
         {
-          start: 200,
-          end: 300,
+          range_start: 200,
+          range_end: 300,
           value: ByteUtils.bytesToBuffer(testValue)
         }
-      ].filter(r => r.start <= end && r.end > start)
+      ].filter(r => r.range_start <= end && r.range_end > start)
     }
   })
 
@@ -39,6 +39,7 @@ jest.mock('pg', () => {
     Client: jest.fn().mockImplementation(() => {
       return {
         connect: () => {},
+        end: () => {},
         query: mockQuery
       }
     })
@@ -49,31 +50,36 @@ describe('PostgreSqlRangeDb', () => {
   let kvs: PostgreSqlKeyValueStore
   beforeEach(async () => {
     mockQuery.mockClear()
-    kvs = await PostgreSqlKeyValueStore.open(testDbName)
+    const client = new Client()
+    kvs = new PostgreSqlKeyValueStore(client)
+    await kvs.open()
+  })
+  afterEach(async () => {
+    await kvs.close()
   })
   describe('put', () => {
     it('suceed to put', async () => {
       const rangeDb = new PostgreSqlRangeDb(kvs)
       await rangeDb.put(10, 20, testValue)
-      expect(mockQuery).toHaveBeenCalledTimes(4)
+      expect(mockQuery).toHaveBeenCalledTimes(6)
     })
     it('suceed to put a range and update existing', async () => {
       const rangeDb = new PostgreSqlRangeDb(kvs)
       await rangeDb.put(50, 150, testValue)
-      expect(mockQuery).toHaveBeenCalledTimes(5)
+      expect(mockQuery).toHaveBeenCalledTimes(7)
     })
     it('suceed to update a range within existing range', async () => {
       const rangeDb = new PostgreSqlRangeDb(kvs)
       await rangeDb.put(110, 120, testValue)
-      expect(mockQuery).toHaveBeenCalledTimes(6)
-      expect(mockQuery.mock.calls[5][0]).toBe('COMMIT')
+      expect(mockQuery).toHaveBeenCalledTimes(8)
+      expect(mockQuery.mock.calls[7][0]).toBe('COMMIT')
     })
     it('rollback', async () => {
       const rangeDb = new PostgreSqlRangeDb(kvs)
       await expect(rangeDb.put(1000, 1050, testValue)).rejects.toEqual(
         new Error('connection refused')
       )
-      expect(mockQuery.mock.calls[2][0]).toBe('ROLLBACK')
+      expect(mockQuery.mock.calls[4][0]).toBe('ROLLBACK')
     })
   })
   describe('get', () => {
@@ -84,7 +90,7 @@ describe('PostgreSqlRangeDb', () => {
       expect(ranges[0].start).toBe(100)
       expect(ranges[0].end).toBe(200)
       expect(ranges[0].value).toEqual(testValue)
-      expect(mockQuery).toHaveBeenCalledTimes(1)
+      expect(mockQuery).toHaveBeenCalledTimes(3)
     })
     it('get nothing', async () => {
       const rangeDb = new PostgreSqlRangeDb(kvs)
@@ -101,7 +107,7 @@ describe('PostgreSqlRangeDb', () => {
     it('suceed to del', async () => {
       const rangeDb = new PostgreSqlRangeDb(kvs)
       await rangeDb.del(0, 50)
-      expect(mockQuery).toHaveBeenCalledTimes(1)
+      expect(mockQuery).toHaveBeenCalledTimes(3)
     })
   })
 })

@@ -39,6 +39,7 @@ jest.mock('pg', () => {
     Client: function() {
       return {
         connect: () => {},
+        end: () => {},
         query: mockQuery
       }
     }
@@ -49,12 +50,17 @@ describe('PostgreSqlKeyValueStore', () => {
   let kvs: PostgreSqlKeyValueStore
   beforeEach(async () => {
     mockQuery.mockClear()
-    kvs = await PostgreSqlKeyValueStore.open(testDbName)
+    const client = new Client()
+    kvs = new PostgreSqlKeyValueStore(client)
+    await kvs.open()
+  })
+  afterEach(async () => {
+    await kvs.close()
   })
   describe('put', () => {
     it('suceed to put', async () => {
       await kvs.put(testKey, testValue)
-      expect(mockQuery).toHaveBeenCalledTimes(1)
+      expect(mockQuery).toHaveBeenCalledTimes(3)
     })
   })
   describe('get', () => {
@@ -72,7 +78,7 @@ describe('PostgreSqlKeyValueStore', () => {
       it('suceed to put', async () => {
         const bucket = kvs.bucket(testBucket)
         await bucket.put(testKey, testValue)
-        expect(mockQuery).toHaveBeenCalledTimes(1)
+        expect(mockQuery).toHaveBeenCalledTimes(3)
       })
     })
     describe('get', () => {
