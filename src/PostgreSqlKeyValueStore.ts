@@ -35,10 +35,20 @@ export class PostgreSqlKeyValueStore implements wakkanay.db.KeyValueStore {
       PostgreSqlKeyValueStore.defaultBucketName
     )
   }
-  static async open(dbName: Bytes): Promise<PostgreSqlKeyValueStore> {
-    const client = new Client()
-    await client.connect()
-    return new PostgreSqlKeyValueStore(client)
+  async open(): Promise<void> {
+    await this.client.connect()
+    await this.initilize()
+  }
+  async close(): Promise<void> {
+    await this.client.end()
+  }
+  async initilize(): Promise<void> {
+    await this.client.query(
+      'CREATE TABLE IF NOT EXISTS kvs (bucket bytea NOT NULL, key bytea NOT NULL, value bytea NOT NULL, PRIMARY KEY (bucket, key));'
+    )
+    await this.client.query(
+      'CREATE TABLE IF NOT EXISTS range (range_start BIGINT NOT NULL, range_end BIGINT NOT NULL, value bytea NOT NULL, PRIMARY KEY (range_end));'
+    )
   }
   async get(key: Bytes): Promise<Bytes | null> {
     return this.rootBucket.get(key)
@@ -69,7 +79,7 @@ export class PostgreSqlBucket implements wakkanay.db.KeyValueStore {
   }
   async get(key: Bytes): Promise<Bytes | null> {
     const res = await this.db.client.query(
-      'SELECT * FROM bucket WHERE bucket = $1 AND key = $1',
+      'SELECT * FROM kvs WHERE bucket = $1 AND key = $2',
       [ByteUtils.bytesToBuffer(this.bucketName), ByteUtils.bytesToBuffer(key)]
     )
     if (res.rows.length == 0) {

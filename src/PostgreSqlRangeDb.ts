@@ -18,11 +18,16 @@ export class PostgreSqlRangeDb implements RangeStore {
   }
   async get(start: number, end: number): Promise<RangeRecord[]> {
     const res = await this.client.query(
-      'SELECT * FROM range WHERE start <= $2 AND end > $1',
+      'SELECT * FROM range WHERE range_start <= $2 AND range_end > $1',
       [start, end]
     )
     return res.rows.map(
-      r => new RangeRecord(r.start, r.end, ByteUtils.bufferToBytes(r.value))
+      r =>
+        new RangeRecord(
+          r.range_start,
+          r.range_end,
+          ByteUtils.bufferToBytes(r.value)
+        )
     )
   }
   async put(start: number, end: number, value: Bytes): Promise<void> {
@@ -53,7 +58,7 @@ export class PostgreSqlRangeDb implements RangeStore {
   }
   async del(start: number, end: number): Promise<void> {
     await this.client.query(
-      'DELETE * FROM range WHERE start <= $2 AND end > $1',
+      'DELETE * FROM range WHERE range_start <= $2 AND range_end > $1',
       [start, end]
     )
   }
@@ -66,7 +71,7 @@ export class PostgreSqlRangeDb implements RangeStore {
     value: Bytes
   ): Promise<void> {
     await this.client.query(
-      'INSERT INTO range(start, end, value) VALUES($1, $2, $3)',
+      'INSERT INTO range(range_start, range_end, value) VALUES($1, $2, $3)',
       [start, end, ByteUtils.bytesToBuffer(value)]
     )
   }
