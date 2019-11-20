@@ -100,7 +100,7 @@ export class PostgreSqlBucket implements wakkanay.db.KeyValueStore {
   }
   async del(key: Bytes): Promise<void> {
     await this.db.client.query(
-      'DELETE * FROM kvs WHERE bucket = $1 AND key = $1',
+      'DELETE FROM kvs WHERE bucket = $1 AND key = $1',
       [ByteUtils.bytesToBuffer(this.bucketName), ByteUtils.bytesToBuffer(key)]
     )
   }

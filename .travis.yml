@@ -5,9 +5,6 @@ node_js:
 services:
   - postgresql
 
-before_script:
-  - psql -c 'create database postgres;' -U postgres
-
 before_install:
   # Upgrade npm to >=6.12 because of prepare don't work with `npm ci` command in old version.
   # https://npm.community/t/npm-ci-does-not-run-prepare-script-for-git-modules-version-6-11/10076/3
