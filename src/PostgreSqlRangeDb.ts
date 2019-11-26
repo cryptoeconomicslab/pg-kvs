@@ -18,32 +18,22 @@ export class PostgreSqlRangeDb implements RangeStore {
   }
   async get(start: number, end: number): Promise<RangeRecord[]> {
     const res = await this.client.query(
-      'SELECT * FROM range WHERE range_start <= $2 AND range_end > $1',
+      'SELECT * FROM range WHERE range_start <= $2 AND range_end > $1 ORDER BY range_end',
       [start, end]
     )
-    return res.rows
-      .map(
-        r =>
-          new RangeRecord(
-            Number(r.range_start),
-            Number(r.range_end),
-            ByteUtils.bufferToBytes(r.value)
-          )
-      )
-      .sort((a: RangeRecord, b: RangeRecord) => {
-        if (a.end > b.end) {
-          return 1
-        } else if (a.end < b.end) {
-          return -1
-        } else {
-          return 0
-        }
-      })
+    return res.rows.map(
+      r =>
+        new RangeRecord(
+          Number(r.range_start),
+          Number(r.range_end),
+          ByteUtils.bufferToBytes(r.value)
+        )
+    )
   }
   async put(start: number, end: number, value: Bytes): Promise<void> {
     try {
       await this.client.query('BEGIN')
-      const existingRanges = await this.get(start, end)
+      const existingRanges = await this.delBatch(start, end)
       if (existingRanges.length > 0 && existingRanges[0].start < start) {
         await this.putOneRange(
           existingRanges[0].start,
@@ -68,7 +58,7 @@ export class PostgreSqlRangeDb implements RangeStore {
   }
   async del(start: number, end: number): Promise<void> {
     await this.client.query(
-      'DELETE FROM range WHERE range_start <= $2 AND range_end > $1',
+      'DELETE FROM range WHERE range_start <= $2 AND range_end > $1 RETURNING *',
       [start, end]
     )
   }
@@ -85,6 +75,20 @@ export class PostgreSqlRangeDb implements RangeStore {
         'ON CONFLICT ON CONSTRAINT range_pkey ' +
         'DO UPDATE SET range_start=$1, value=$3',
       [start, end, ByteUtils.bytesToBuffer(value)]
+    )
+  }
+  async delBatch(start: number, end: number): Promise<RangeRecord[]> {
+    const res = await this.client.query(
+      'DELETE FROM range WHERE range_start <= $2 AND range_end > $1 RETURNING *',
+      [start, end]
+    )
+    return res.rows.map(
+      r =>
+        new RangeRecord(
+          Number(r.range_start),
+          Number(r.range_end),
+          ByteUtils.bufferToBytes(r.value)
+        )
     )
   }
 }
