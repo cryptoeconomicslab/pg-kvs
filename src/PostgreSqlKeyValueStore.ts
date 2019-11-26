@@ -47,7 +47,7 @@ export class PostgreSqlKeyValueStore implements wakkanay.db.KeyValueStore {
       'CREATE TABLE IF NOT EXISTS kvs (bucket bytea NOT NULL, key bytea NOT NULL, value bytea NOT NULL, PRIMARY KEY (bucket, key));'
     )
     await this.client.query(
-      'CREATE TABLE IF NOT EXISTS range (range_start BIGINT NOT NULL, range_end BIGINT NOT NULL, value bytea NOT NULL, PRIMARY KEY (range_end));'
+      'CREATE TABLE IF NOT EXISTS range (bucket bytea NOT NULL, range_start BIGINT NOT NULL, range_end BIGINT NOT NULL, value bytea NOT NULL, PRIMARY KEY (bucket, range_end));'
     )
   }
   async get(key: Bytes): Promise<Bytes | null> {
