@@ -13,8 +13,8 @@ const mockQuery = jest
     if (!queryParams) {
       return
     }
-    const start = queryParams[0]
-    const end = queryParams[1]
+    const start = queryParams[1]
+    const end = queryParams[2]
     if (start == 1000) {
       throw new Error('connection refused')
     }

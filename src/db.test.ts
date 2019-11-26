@@ -2,6 +2,7 @@ import { Client } from 'pg'
 import { ByteUtils, PostgreSqlKeyValueStore } from './PostgreSqlKeyValueStore'
 import { PostgreSqlRangeDb } from './PostgreSqlRangeDb'
 import { Bytes } from 'wakkanay/dist/types/Codables'
+import { RangeRecord } from 'wakkanay/dist/db/RangeStore'
 
 const testDbName = Bytes.fromString('test_pg')
 const testBucket = Bytes.fromString('test_bucket')
@@ -85,23 +86,20 @@ describe('DB', () => {
         await rangeDb.put(50, 150, testUpdate)
         const ranges = await rangeDb.get(50, 150)
         expect(ranges.length).toBe(1)
-        expect(ranges[0].start).toBe(50)
-        expect(ranges[0].end).toBe(150)
-        expect(ranges[0].value).toEqual(testUpdate)
+        expect(ranges[0]).toEqual(new RangeRecord(50, 150, testUpdate))
       })
       it('suceed to update a range within existing range', async () => {
         await rangeDb.put(110, 120, testUpdate)
         const ranges = await rangeDb.get(100, 150)
         expect(ranges.length).toBe(3)
-        expect(ranges[0].start).toBe(100)
-        expect(ranges[0].end).toBe(110)
-        expect(ranges[0].value).toEqual(testValue)
-        expect(ranges[1].start).toBe(110)
-        expect(ranges[1].end).toBe(120)
-        expect(ranges[1].value).toEqual(testUpdate)
-        expect(ranges[2].start).toBe(120)
-        expect(ranges[2].end).toBe(150)
-        expect(ranges[2].value).toEqual(testValue)
+        expect(ranges[0]).toEqual(new RangeRecord(100, 110, testValue))
+        expect(ranges[1]).toEqual(new RangeRecord(110, 120, testUpdate))
+        expect(ranges[2]).toEqual(new RangeRecord(120, 150, testValue))
+      })
+      it('suceed to update a range across existing ranges', async () => {
+        await rangeDb.put(100, 160, testUpdate)
+        const ranges = await rangeDb.get(100, 150)
+        expect(ranges).toEqual([new RangeRecord(100, 160, testUpdate)])
       })
     })
     describe('get', () => {
@@ -122,10 +120,17 @@ describe('DB', () => {
       })
       it('get multiple ranges', async () => {
         const ranges = await rangeDb.get(100, 250)
-        expect(ranges.length).toBe(2)
+        expect(ranges).toEqual([
+          new RangeRecord(100, 200, testValue),
+          new RangeRecord(200, 300, testValue)
+        ])
       })
     })
     describe('del', () => {
+      beforeEach(async () => {
+        await rangeDb.put(100, 200, testValue)
+        await rangeDb.put(200, 300, testValue)
+      })
       it('suceed to del', async () => {
         await rangeDb.del(0, 50)
       })
