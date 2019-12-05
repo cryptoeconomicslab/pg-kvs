@@ -13,14 +13,40 @@ export class ByteUtils {
 }
 
 export class PostgreSqlIterator implements Iterator {
-  bucketName: Bytes
-  bound: Bytes
-  constructor(bucketName: Bytes, bound: Bytes) {
-    this.bucketName = bucketName
-    this.bound = bound
+  private buffer: { key: Bytes; value: Bytes }[] = []
+  constructor(
+    private db: PostgreSqlKeyValueStore,
+    private bucketName: Bytes,
+    private bound: Bytes,
+    private limit: number = 10
+  ) {}
+
+  public async next(): Promise<{ key: Bytes; value: Bytes } | null> {
+    if (this.buffer.length == 0) {
+      this.buffer = await this.fetch()
+      if (this.buffer.length > 0) {
+        this.bound = this.buffer[this.buffer.length - 1].key
+      }
+    }
+    const result = this.buffer.shift()
+    return result ? result : null
   }
-  public next(): Promise<{ key: Bytes; value: Bytes } | null> {
-    return new Promise((resolve, reject) => {})
+
+  private async fetch(): Promise<{ key: Bytes; value: Bytes }[]> {
+    const res = await this.db.client.query(
+      'SELECT * FROM kvs WHERE bucket = $1 AND key >= $2 ORDER BY key LIMIT $3',
+      [
+        ByteUtils.bytesToBuffer(this.bucketName),
+        ByteUtils.bytesToBuffer(this.bound),
+        this.limit
+      ]
+    )
+    return res.rows.map(r => {
+      return {
+        key: ByteUtils.bufferToBytes(r.key),
+        value: ByteUtils.bufferToBytes(r.value)
+      }
+    })
   }
 }
 
@@ -141,7 +167,7 @@ export class PostgreSqlBucket implements wakkanay.db.KeyValueStore {
     }
   }
   async iter(bound: Bytes): Promise<Iterator> {
-    return new PostgreSqlIterator(this.bucketName, bound)
+    return new PostgreSqlIterator(this.db, this.bucketName, bound)
   }
   bucket(key: Bytes): wakkanay.db.KeyValueStore {
     return new PostgreSqlBucket(this.db, Bytes.concat(this.bucketName, key))
