@@ -14,6 +14,7 @@ export class ByteUtils {
 
 export class PostgreSqlIterator implements Iterator {
   private buffer: { key: Bytes; value: Bytes }[] = []
+  private isFirstFetch = true
   constructor(
     private db: PostgreSqlKeyValueStore,
     private bucketName: Bytes,
@@ -23,7 +24,8 @@ export class PostgreSqlIterator implements Iterator {
 
   public async next(): Promise<{ key: Bytes; value: Bytes } | null> {
     if (this.buffer.length == 0) {
-      this.buffer = await this.fetch()
+      this.buffer = await this.fetch(this.isFirstFetch)
+      this.isFirstFetch = false
       if (this.buffer.length > 0) {
         this.bound = this.buffer[this.buffer.length - 1].key
       }
@@ -32,9 +34,13 @@ export class PostgreSqlIterator implements Iterator {
     return result ? result : null
   }
 
-  private async fetch(): Promise<{ key: Bytes; value: Bytes }[]> {
+  private async fetch(
+    isFirst: boolean
+  ): Promise<{ key: Bytes; value: Bytes }[]> {
     const res = await this.db.client.query(
-      'SELECT * FROM kvs WHERE bucket = $1 AND key >= $2 ORDER BY key LIMIT $3',
+      isFirst
+        ? 'SELECT * FROM kvs WHERE bucket = $1 AND key >= $2 ORDER BY key LIMIT $3'
+        : 'SELECT * FROM kvs WHERE bucket = $1 AND key > $2 ORDER BY key LIMIT $3',
       [
         ByteUtils.bytesToBuffer(this.bucketName),
         ByteUtils.bytesToBuffer(this.bound),
