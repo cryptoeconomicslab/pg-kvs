@@ -1,8 +1,13 @@
 import { Client } from 'pg'
-import { ByteUtils, PostgreSqlKeyValueStore } from './PostgreSqlKeyValueStore'
+import {
+  ByteUtils,
+  PostgreSqlKeyValueStore,
+  PostgreSqlIterator
+} from './PostgreSqlKeyValueStore'
 import { PostgreSqlRangeDb } from './PostgreSqlRangeDb'
 import { Bytes } from 'wakkanay/dist/types/Codables'
 import { RangeRecord } from 'wakkanay/dist/db/RangeStore'
+import { KeyValueStore } from 'wakkanay/dist/db'
 
 const testDbName = Bytes.fromString('test_pg')
 const testBucket = Bytes.fromString('test_bucket')
@@ -69,6 +74,52 @@ describe('DB', () => {
       })
     })
   })
+
+  describe('PostgreSqlIterator', () => {
+    const testKey1 = Bytes.fromString('test_key1')
+    const testKey2 = Bytes.fromString('test_key2')
+    const testKey3 = Bytes.fromString('test_key3')
+    const testBucket = Bytes.fromString('test_bucket')
+    const testBucketNotFound = Bytes.fromString('test_bucket_not_found')
+    let bucket: KeyValueStore
+
+    beforeEach(async () => {
+      bucket = kvs.bucket(testBucket)
+      await bucket.put(testKey1, testKey1)
+      await bucket.put(testKey2, testKey2)
+      await bucket.put(testKey3, testKey3)
+    })
+    describe('next', () => {
+      it('return key and value', async () => {
+        const iter = await bucket.iter(testKey1)
+        const keyValue = await iter.next()
+        expect(keyValue).toEqual({ key: testKey1, value: testKey1 })
+      })
+      it('return null', async () => {
+        const bucket = kvs.bucket(testBucketNotFound)
+        const iter = await bucket.iter(testKey1)
+        const keyValue = await iter.next()
+        expect(keyValue).toBeNull()
+      })
+      it('return multiple sets of key and value', async () => {
+        const iter = new PostgreSqlIterator(
+          kvs,
+          Bytes.concat(Bytes.fromString('root'), testBucket),
+          testKey1,
+          2
+        )
+        const keyValue1 = await iter.next()
+        const keyValue2 = await iter.next()
+        const keyValue3 = await iter.next()
+        const keyValue4 = await iter.next()
+        expect(keyValue1).toEqual({ key: testKey1, value: testKey1 })
+        expect(keyValue2).toEqual({ key: testKey2, value: testKey2 })
+        expect(keyValue3).toEqual({ key: testKey3, value: testKey3 })
+        expect(keyValue4).toBeNull()
+      })
+    })
+  })
+
   describe('PostgreSqlRangeDb', () => {
     let rangeDb: PostgreSqlRangeDb
     beforeEach(async () => {
