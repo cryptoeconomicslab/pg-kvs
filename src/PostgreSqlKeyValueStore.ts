@@ -19,12 +19,15 @@ export class PostgreSqlIterator implements Iterator {
     private db: PostgreSqlKeyValueStore,
     private bucketName: Bytes,
     private bound: Bytes,
+    private lowerBoundExclusive: boolean,
     private limit: number = 10
   ) {}
 
   public async next(): Promise<{ key: Bytes; value: Bytes } | null> {
     if (this.buffer.length == 0) {
-      this.buffer = await this.fetch(this.isFirstFetch)
+      this.buffer = await this.fetch(
+        this.isFirstFetch && this.lowerBoundExclusive
+      )
       this.isFirstFetch = false
       if (this.buffer.length > 0) {
         this.bound = this.buffer[this.buffer.length - 1].key
@@ -79,7 +82,7 @@ export class PostgreSqlKeyValueStore implements wakkanay.db.KeyValueStore {
       'CREATE TABLE IF NOT EXISTS kvs (bucket bytea NOT NULL, key bytea NOT NULL, value bytea NOT NULL, PRIMARY KEY (bucket, key));'
     )
     await this.client.query(
-      'CREATE TABLE IF NOT EXISTS range (bucket bytea NOT NULL, range_start BIGINT NOT NULL, range_end BIGINT NOT NULL, value bytea NOT NULL, PRIMARY KEY (bucket, range_end));'
+      'CREATE TABLE IF NOT EXISTS range (bucket bytea NOT NULL, range_start bytea NOT NULL, range_end bytea NOT NULL, value bytea NOT NULL, PRIMARY KEY (bucket, range_end));'
     )
   }
   async get(key: Bytes): Promise<Bytes | null> {
@@ -94,15 +97,21 @@ export class PostgreSqlKeyValueStore implements wakkanay.db.KeyValueStore {
   async batch(operations: BatchOperation[]): Promise<void> {
     return this.rootBucket.batch(operations)
   }
-  async iter(bound: Bytes): Promise<Iterator> {
-    return this.rootBucket.iter(bound)
+  iter(lowerBound: Bytes, lowerBoundExclusive?: boolean | undefined): Iterator {
+    return this.rootBucket.iter(lowerBound, lowerBoundExclusive)
   }
-  bucket(key: Bytes): wakkanay.db.KeyValueStore {
+  async bucket(key: Bytes): Promise<wakkanay.db.KeyValueStore> {
     return this.rootBucket.bucket(key)
   }
 }
 
 export class PostgreSqlBucket implements wakkanay.db.KeyValueStore {
+  close(): Promise<void> {
+    throw new Error('Method not implemented.')
+  }
+  open(): Promise<void> {
+    throw new Error('Method not implemented.')
+  }
   db: PostgreSqlKeyValueStore
   bucketName: Bytes
   constructor(db: PostgreSqlKeyValueStore, bucketName: Bytes) {
@@ -172,10 +181,15 @@ export class PostgreSqlBucket implements wakkanay.db.KeyValueStore {
       // What should we do finally?
     }
   }
-  async iter(bound: Bytes): Promise<Iterator> {
-    return new PostgreSqlIterator(this.db, this.bucketName, bound)
+  iter(lowerBound: Bytes, lowerBoundExclusive?: boolean | undefined): Iterator {
+    return new PostgreSqlIterator(
+      this.db,
+      this.bucketName,
+      lowerBound,
+      lowerBoundExclusive !== undefined ? lowerBoundExclusive : true
+    )
   }
-  bucket(key: Bytes): wakkanay.db.KeyValueStore {
+  async bucket(key: Bytes): Promise<wakkanay.db.KeyValueStore> {
     return new PostgreSqlBucket(this.db, Bytes.concat(this.bucketName, key))
   }
 }
