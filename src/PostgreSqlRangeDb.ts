@@ -19,7 +19,7 @@ export class PostgreSqlRangeDb implements RangeStore {
   async get(start: number, end: number): Promise<RangeRecord[]> {
     const res = await this.client.query(
       'SELECT * FROM range WHERE bucket = $1 AND range_start <= $3 AND range_end > $2 ORDER BY range_end',
-      [this.bucket, start, end]
+      [this.bucketName, start, end]
     )
     return res.rows.map(
       r =>
@@ -59,7 +59,7 @@ export class PostgreSqlRangeDb implements RangeStore {
   async del(start: number, end: number): Promise<void> {
     await this.client.query(
       'DELETE FROM range WHERE bucket = $1 AND range_start <= $3 AND range_end > $2 RETURNING *',
-      [this.bucket, start, end]
+      [this.bucketName, start, end]
     )
   }
   bucket(key: Bytes): wakkanay.db.RangeStore {
@@ -74,13 +74,13 @@ export class PostgreSqlRangeDb implements RangeStore {
       'INSERT INTO range(bucket, range_start, range_end, value) VALUES($1, $2, $3, $4) ' +
         'ON CONFLICT ON CONSTRAINT range_pkey ' +
         'DO UPDATE SET range_start=$2, value=$4',
-      [this.bucket, start, end, ByteUtils.bytesToBuffer(value)]
+      [this.bucketName, start, end, ByteUtils.bytesToBuffer(value)]
     )
   }
   async delBatch(start: number, end: number): Promise<RangeRecord[]> {
     const res = await this.client.query(
       'DELETE FROM range WHERE bucket = $1 AND range_start <= $3 AND range_end > $2 RETURNING *',
-      [this.bucket, start, end]
+      [this.bucketName, start, end]
     )
     return res.rows.map(
       r =>

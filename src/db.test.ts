@@ -154,16 +154,16 @@ describe('DB', () => {
       })
     })
     describe('get', () => {
+      const alice = Bytes.fromString('alice')
+      const bob = Bytes.fromString('bob')
+      const carol = Bytes.fromString('carol')
       beforeEach(async () => {
         await rangeDb.put(100, 200, testValue)
         await rangeDb.put(200, 300, testValue)
       })
       it('suceed to get', async () => {
         const ranges = await rangeDb.get(100, 110)
-        expect(ranges.length).toBe(1)
-        expect(ranges[0].start).toBe(100)
-        expect(ranges[0].end).toBe(200)
-        expect(ranges[0].value).toEqual(testValue)
+        expect(ranges).toEqual([new RangeRecord(100, 200, testValue)])
       })
       it('get nothing', async () => {
         const ranges = await rangeDb.get(500, 600)
@@ -174,6 +174,18 @@ describe('DB', () => {
         expect(ranges).toEqual([
           new RangeRecord(100, 200, testValue),
           new RangeRecord(200, 300, testValue)
+        ])
+      })
+      it('get ranges correctly', async () => {
+        const bucket = rangeDb.bucket(Bytes.fromString('aaa'))
+        await bucket.put(0x100, 0x120, alice)
+        await bucket.put(0x120, 0x200, bob)
+        await bucket.put(0x1000, 0x1200, carol)
+        const ranges = await bucket.get(0, 0x2000)
+        expect(ranges).toEqual([
+          new RangeRecord(0x100, 0x120, alice),
+          new RangeRecord(0x120, 0x200, bob),
+          new RangeRecord(0x1000, 0x1200, carol)
         ])
       })
     })
