@@ -76,19 +76,19 @@ describe('PostgreSqlKeyValueStore', () => {
   describe('bucket', () => {
     describe('put', () => {
       it('suceed to put', async () => {
-        const bucket = kvs.bucket(testBucket)
+        const bucket = await kvs.bucket(testBucket)
         await bucket.put(testKey, testValue)
         expect(mockQuery).toHaveBeenCalledTimes(3)
       })
     })
     describe('get', () => {
       it('suceed to get', async () => {
-        const bucket = kvs.bucket(testBucket)
+        const bucket = await kvs.bucket(testBucket)
         const value = await bucket.get(testKey)
         expect(value).toEqual(testValue)
       })
       it('get null', async () => {
-        const bucket = kvs.bucket(testBucket)
+        const bucket = await kvs.bucket(testBucket)
         const value = await bucket.get(testNotFoundKey)
         expect(value).toBeNull()
       })

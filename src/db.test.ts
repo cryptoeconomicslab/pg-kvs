@@ -5,7 +5,7 @@ import {
   PostgreSqlIterator
 } from './PostgreSqlKeyValueStore'
 import { PostgreSqlRangeDb } from './PostgreSqlRangeDb'
-import { Bytes } from 'wakkanay/dist/types/Codables'
+import { Bytes, BigNumber } from 'wakkanay/dist/types/Codables'
 import { RangeRecord } from 'wakkanay/dist/db/RangeStore'
 import { KeyValueStore } from 'wakkanay/dist/db'
 
@@ -53,22 +53,22 @@ describe('DB', () => {
   describe('bucket', () => {
     describe('put', () => {
       it('suceed to put', async () => {
-        const bucket = kvs.bucket(testBucket)
+        const bucket = await kvs.bucket(testBucket)
         await bucket.put(testKey, testValue)
       })
     })
     describe('get', () => {
       beforeEach(async () => {
-        const bucket = kvs.bucket(testBucket)
+        const bucket = await kvs.bucket(testBucket)
         await bucket.put(testKey, testValue)
       })
       it('suceed to get', async () => {
-        const bucket = kvs.bucket(testBucket)
+        const bucket = await kvs.bucket(testBucket)
         const value = await bucket.get(testKey)
         expect(value).toEqual(testValue)
       })
       it('get null', async () => {
-        const bucket = kvs.bucket(testBucket)
+        const bucket = await kvs.bucket(testBucket)
         const value = await bucket.get(testNotFoundKey)
         expect(value).toBeNull()
       })
@@ -84,7 +84,7 @@ describe('DB', () => {
     let bucket: KeyValueStore
 
     beforeEach(async () => {
-      bucket = kvs.bucket(testBucket)
+      bucket = await kvs.bucket(testBucket)
       await bucket.put(testKey1, testKey1)
       await bucket.put(testKey2, testKey2)
       await bucket.put(testKey3, testKey3)
@@ -96,7 +96,7 @@ describe('DB', () => {
         expect(keyValue).toEqual({ key: testKey1, value: testKey1 })
       })
       it('return null', async () => {
-        const bucket = kvs.bucket(testBucketNotFound)
+        const bucket = await kvs.bucket(testBucketNotFound)
         const iter = await bucket.iter(testKey1)
         const keyValue = await iter.next()
         expect(keyValue).toBeNull()
@@ -106,6 +106,7 @@ describe('DB', () => {
           kvs,
           Bytes.concat(Bytes.fromString('root'), testBucket),
           testKey1,
+          true,
           2
         )
         const keyValue1 = await iter.next()
@@ -121,81 +122,146 @@ describe('DB', () => {
   })
 
   describe('PostgreSqlRangeDb', () => {
+    const alice = Bytes.fromString('alice')
+    const bob = Bytes.fromString('bob')
+    const carol = Bytes.fromString('carol')
+
     let rangeDb: PostgreSqlRangeDb
     beforeEach(async () => {
       rangeDb = new PostgreSqlRangeDb(kvs)
     })
-    describe('put', () => {
-      const testUpdate = Bytes.fromString('test_update')
-      beforeEach(async () => {
-        await rangeDb.put(100, 150, testValue)
-      })
-      it('suceed to put', async () => {
-        await rangeDb.put(10, 20, testUpdate)
-      })
-      it('suceed to put a range and update existing', async () => {
-        await rangeDb.put(50, 150, testUpdate)
-        const ranges = await rangeDb.get(50, 150)
-        expect(ranges.length).toBe(1)
-        expect(ranges[0]).toEqual(new RangeRecord(50, 150, testUpdate))
-      })
-      it('suceed to update a range within existing range', async () => {
-        await rangeDb.put(110, 120, testUpdate)
-        const ranges = await rangeDb.get(100, 150)
-        expect(ranges.length).toBe(3)
-        expect(ranges[0]).toEqual(new RangeRecord(100, 110, testValue))
-        expect(ranges[1]).toEqual(new RangeRecord(110, 120, testUpdate))
-        expect(ranges[2]).toEqual(new RangeRecord(120, 150, testValue))
-      })
-      it('suceed to update a range across existing ranges', async () => {
-        await rangeDb.put(100, 160, testUpdate)
-        const ranges = await rangeDb.get(100, 150)
-        expect(ranges).toEqual([new RangeRecord(100, 160, testUpdate)])
-      })
+
+    it('get ranges', async () => {
+      await rangeDb.put(0n, 100n, alice)
+      await rangeDb.put(100n, 200n, bob)
+      await rangeDb.put(200n, 300n, carol)
+      const ranges = await rangeDb.get(0n, 300n)
+      expect(ranges.length).toEqual(3)
     })
+    it('get mid range', async () => {
+      await rangeDb.put(0n, 10n, alice)
+      await rangeDb.put(10n, 20n, bob)
+      await rangeDb.put(20n, 30n, carol)
+      const ranges = await rangeDb.get(10n, 15n)
+      expect(ranges.length).toEqual(1)
+    })
+    it('get small range', async () => {
+      await rangeDb.put(120n, 150n, alice)
+      await rangeDb.put(0n, 20n, bob)
+      await rangeDb.put(500n, 600n, carol)
+      const ranges = await rangeDb.get(100n, 200n)
+      expect(ranges.length).toEqual(1)
+    })
+    it('get large range', async () => {
+      await rangeDb.put(0n, 500n, alice)
+      const ranges = await rangeDb.get(100n, 200n)
+      expect(ranges.length).toEqual(1)
+    })
+    it("don't get edge", async () => {
+      await rangeDb.put(80n, 100n, alice)
+      const ranges = await rangeDb.get(100n, 200n)
+      expect(ranges.length).toEqual(0)
+    })
+    it('del ranges', async () => {
+      await rangeDb.put(0n, 100n, alice)
+      await rangeDb.put(100n, 200n, bob)
+      await rangeDb.put(200n, 300n, carol)
+      await rangeDb.del(0n, 300n)
+      const ranges = await rangeDb.get(0n, 300n)
+      expect(ranges.length).toEqual(0)
+    })
+    it('update range', async () => {
+      await rangeDb.put(0n, 300n, alice)
+      await rangeDb.put(100n, 200n, bob)
+      const ranges = await rangeDb.get(0n, 300n)
+      expect(ranges).toEqual([
+        new RangeRecord(0n, 100n, alice),
+        new RangeRecord(100n, 200n, bob),
+        new RangeRecord(200n, 300n, alice)
+      ])
+    })
+
     describe('get', () => {
-      const alice = Bytes.fromString('alice')
-      const bob = Bytes.fromString('bob')
-      const carol = Bytes.fromString('carol')
+      const bigNumberStart = 2n ** 34n
+      const bigNumberEnd = 2n ** 34n + 500n
       beforeEach(async () => {
-        await rangeDb.put(100, 200, testValue)
-        await rangeDb.put(200, 300, testValue)
+        await rangeDb.put(bigNumberStart, bigNumberEnd, alice)
       })
-      it('suceed to get', async () => {
-        const ranges = await rangeDb.get(100, 110)
-        expect(ranges).toEqual([new RangeRecord(100, 200, testValue)])
-      })
-      it('get nothing', async () => {
-        const ranges = await rangeDb.get(500, 600)
-        expect(ranges).toEqual([])
-      })
-      it('get multiple ranges', async () => {
-        const ranges = await rangeDb.get(100, 250)
+      it('get a range whose start and end are more than 8 bytes', async () => {
+        const ranges = await rangeDb.get(bigNumberStart, bigNumberStart + 1000n)
         expect(ranges).toEqual([
-          new RangeRecord(100, 200, testValue),
-          new RangeRecord(200, 300, testValue)
+          new RangeRecord(bigNumberStart, bigNumberEnd, alice)
         ])
+      })
+      it('get no ranges', async () => {
+        const ranges = await rangeDb.get(2n ** 32n, 2n ** 32n + 1000n)
+        expect(ranges.length).toEqual(0)
       })
       it('get ranges correctly', async () => {
-        const bucket = rangeDb.bucket(Bytes.fromString('aaa'))
-        await bucket.put(0x100, 0x120, alice)
-        await bucket.put(0x120, 0x200, bob)
-        await bucket.put(0x1000, 0x1200, carol)
-        const ranges = await bucket.get(0, 0x2000)
+        await rangeDb.put(0x100n, 0x120n, alice)
+        await rangeDb.put(0x120n, 0x200n, bob)
+        await rangeDb.put(0x1000n, 0x1200n, carol)
+        const ranges = await rangeDb.get(0n, 0x2000n)
         expect(ranges).toEqual([
-          new RangeRecord(0x100, 0x120, alice),
-          new RangeRecord(0x120, 0x200, bob),
-          new RangeRecord(0x1000, 0x1200, carol)
+          new RangeRecord(0x100n, 0x120n, alice),
+          new RangeRecord(0x120n, 0x200n, bob),
+          new RangeRecord(0x1000n, 0x1200n, carol)
         ])
       })
     })
-    describe('del', () => {
+
+    describe('put', () => {
+      const bigNumberIndex1 = 2n ** 34n
+      const bigNumberIndex2 = bigNumberIndex1 + 1000n
+      const bigNumberIndex3 = bigNumberIndex1 + 2000n
       beforeEach(async () => {
-        await rangeDb.put(100, 200, testValue)
-        await rangeDb.put(200, 300, testValue)
+        await rangeDb.put(bigNumberIndex1, bigNumberIndex2, alice)
+        await rangeDb.put(bigNumberIndex2, bigNumberIndex3, bob)
       })
-      it('suceed to del', async () => {
-        await rangeDb.del(0, 50)
+      it('put to former', async () => {
+        await rangeDb.put(bigNumberIndex1, bigNumberIndex1 + 500n, carol)
+        const ranges = await rangeDb.get(bigNumberIndex1, bigNumberIndex3)
+        expect(ranges).toEqual([
+          new RangeRecord(bigNumberIndex1, bigNumberIndex1 + 500n, carol),
+          new RangeRecord(bigNumberIndex1 + 500n, bigNumberIndex2, alice),
+          new RangeRecord(bigNumberIndex2, bigNumberIndex3, bob)
+        ])
+      })
+      it('put to middle', async () => {
+        await rangeDb.put(bigNumberIndex1 + 200n, bigNumberIndex1 + 500n, carol)
+        const ranges = await rangeDb.get(bigNumberIndex1, bigNumberIndex3)
+        expect(ranges).toEqual([
+          new RangeRecord(bigNumberIndex1, bigNumberIndex1 + 200n, alice),
+          new RangeRecord(
+            bigNumberIndex1 + 200n,
+            bigNumberIndex1 + 500n,
+            carol
+          ),
+          new RangeRecord(bigNumberIndex1 + 500n, bigNumberIndex2, alice),
+          new RangeRecord(bigNumberIndex2, bigNumberIndex3, bob)
+        ])
+      })
+      it('put to later', async () => {
+        await rangeDb.put(bigNumberIndex1 + 500n, bigNumberIndex2, carol)
+        const ranges = await rangeDb.get(bigNumberIndex1, bigNumberIndex3)
+        expect(ranges).toEqual([
+          new RangeRecord(bigNumberIndex1, bigNumberIndex1 + 500n, alice),
+          new RangeRecord(bigNumberIndex1 + 500n, bigNumberIndex2, carol),
+          new RangeRecord(bigNumberIndex2, bigNumberIndex3, bob)
+        ])
+      })
+      it('put across', async () => {
+        await rangeDb.put(bigNumberIndex1 + 500n, bigNumberIndex2 + 500n, carol)
+        const ranges = await rangeDb.get(bigNumberIndex1, bigNumberIndex3)
+        expect(ranges).toEqual([
+          new RangeRecord(bigNumberIndex1, bigNumberIndex1 + 500n, alice),
+          new RangeRecord(
+            bigNumberIndex1 + 500n,
+            bigNumberIndex2 + 500n,
+            carol
+          ),
+          new RangeRecord(bigNumberIndex2 + 500n, bigNumberIndex3, bob)
+        ])
       })
     })
   })
