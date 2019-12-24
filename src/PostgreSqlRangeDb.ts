@@ -28,7 +28,7 @@ export class PostgreSqlRangeDb implements RangeStore {
 
   async get(start: bigint, end: bigint): Promise<RangeRecord[]> {
     const res = await this.client.query(
-      'SELECT * FROM range WHERE bucket = $1 AND range_start <= $3 AND range_end > $2 ORDER BY range_end',
+      'SELECT * FROM range WHERE bucket = $1 AND range_start < $3 AND range_end > $2 ORDER BY range_end',
       [this.bucketName, bigintToBuffer(start), bigintToBuffer(end)]
     )
     return res.rows.map(

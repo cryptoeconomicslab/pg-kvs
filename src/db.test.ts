@@ -8,6 +8,7 @@ import { PostgreSqlRangeDb } from './PostgreSqlRangeDb'
 import { Bytes, BigNumber } from 'wakkanay/dist/types/Codables'
 import { RangeRecord, RangeStore } from 'wakkanay/dist/db/RangeStore'
 import { KeyValueStore } from 'wakkanay/dist/db'
+import { range } from 'wakkanay/dist/ovm'
 
 const testDbName = Bytes.fromString('test_pg')
 const testBucket = Bytes.fromString('test_bucket')
@@ -126,197 +127,187 @@ describe('DB', () => {
     const bob = Bytes.fromString('bob')
     const carol = Bytes.fromString('carol')
 
-    describe.each(['rangedb', 'bucket'])(
-      'PostgreSqlRangeDb: %p',
-      testDbType => {
-        let rangeStore: RangeStore
-        beforeEach(async () => {
-          rangeStore = new PostgreSqlRangeDb(kvs)
-          if (testDbType == 'bucket') {
-            rangeStore = await rangeStore.bucket(
-              Bytes.fromString('test_bucket')
-            )
-          }
-        })
-
-        it('get ranges', async () => {
-          await rangeStore.put(0n, 100n, alice)
-          await rangeStore.put(100n, 200n, bob)
-          await rangeStore.put(200n, 300n, carol)
-          const ranges = await rangeStore.get(0n, 300n)
-          expect(ranges.length).toEqual(3)
-        })
-        it('get mid range', async () => {
-          await rangeStore.put(0n, 10n, alice)
-          await rangeStore.put(10n, 20n, bob)
-          await rangeStore.put(20n, 30n, carol)
-          const ranges = await rangeStore.get(10n, 15n)
-          expect(ranges.length).toEqual(1)
-        })
-        it('get small range', async () => {
-          await rangeStore.put(120n, 150n, alice)
-          await rangeStore.put(0n, 20n, bob)
-          await rangeStore.put(500n, 600n, carol)
-          const ranges = await rangeStore.get(100n, 200n)
-          expect(ranges.length).toEqual(1)
-          expect(ranges).toEqual([new RangeRecord(120n, 150n, alice)])
-        })
-        it('get large range', async () => {
-          await rangeStore.put(0n, 500n, alice)
-          const ranges = await rangeStore.get(100n, 200n)
-          expect(ranges).toEqual([new RangeRecord(0n, 500n, alice)])
-        })
-        it("don't get edge", async () => {
-          await rangeStore.put(80n, 100n, alice)
-          const ranges = await rangeStore.get(100n, 200n)
-          expect(ranges).toEqual([])
-        })
-        it('del ranges', async () => {
-          await rangeStore.put(0n, 100n, alice)
-          await rangeStore.put(100n, 200n, bob)
-          await rangeStore.put(200n, 300n, carol)
-          await rangeStore.del(0n, 300n)
-          const ranges = await rangeStore.get(0n, 300n)
-          expect(ranges.length).toEqual(0)
-        })
-        it('update range', async () => {
-          await rangeStore.put(0n, 300n, alice)
-          await rangeStore.put(100n, 200n, bob)
-          const ranges = await rangeStore.get(0n, 300n)
-          expect(ranges).toEqual([
-            new RangeRecord(0n, 100n, alice),
-            new RangeRecord(100n, 200n, bob),
-            new RangeRecord(200n, 300n, alice)
-          ])
-        })
-
-        describe('get', () => {
-          const bigNumberStart = 2n ** 34n
-          const bigNumberEnd = 2n ** 34n + 500n
-          beforeEach(async () => {
-            await rangeStore.put(bigNumberStart, bigNumberEnd, alice)
-          })
-          it('get a range whose start and end are more than 8 bytes', async () => {
-            const ranges = await rangeStore.get(
-              bigNumberStart,
-              bigNumberStart + 1000n
-            )
-            expect(ranges).toEqual([
-              new RangeRecord(bigNumberStart, bigNumberEnd, alice)
-            ])
-          })
-          it('get no ranges', async () => {
-            const ranges = await rangeStore.get(2n ** 32n, 2n ** 32n + 1000n)
-            expect(ranges.length).toEqual(0)
-          })
-          it('get ranges correctly', async () => {
-            await rangeStore.put(0x100n, 0x120n, alice)
-            await rangeStore.put(0x120n, 0x200n, bob)
-            await rangeStore.put(0x1000n, 0x1200n, carol)
-            const ranges = await rangeStore.get(0n, 0x2000n)
-            expect(ranges).toEqual([
-              new RangeRecord(0x100n, 0x120n, alice),
-              new RangeRecord(0x120n, 0x200n, bob),
-              new RangeRecord(0x1000n, 0x1200n, carol)
-            ])
-          })
-        })
-
-        describe('put', () => {
-          const bigNumberIndex1 = 2n ** 34n
-          const bigNumberIndex2 = bigNumberIndex1 + 1000n
-          const bigNumberIndex3 = bigNumberIndex1 + 2000n
-          beforeEach(async () => {
-            await rangeStore.put(bigNumberIndex1, bigNumberIndex2, alice)
-            await rangeStore.put(bigNumberIndex2, bigNumberIndex3, bob)
-          })
-          it('put to former', async () => {
-            await rangeStore.put(bigNumberIndex1, bigNumberIndex1 + 500n, carol)
-            const ranges = await rangeStore.get(
-              bigNumberIndex1,
-              bigNumberIndex3
-            )
-            expect(ranges).toEqual([
-              new RangeRecord(bigNumberIndex1, bigNumberIndex1 + 500n, carol),
-              new RangeRecord(bigNumberIndex1 + 500n, bigNumberIndex2, alice),
-              new RangeRecord(bigNumberIndex2, bigNumberIndex3, bob)
-            ])
-          })
-          it('put to middle', async () => {
-            await rangeStore.put(
-              bigNumberIndex1 + 200n,
-              bigNumberIndex1 + 500n,
-              carol
-            )
-            const ranges = await rangeStore.get(
-              bigNumberIndex1,
-              bigNumberIndex3
-            )
-            expect(ranges).toEqual([
-              new RangeRecord(bigNumberIndex1, bigNumberIndex1 + 200n, alice),
-              new RangeRecord(
-                bigNumberIndex1 + 200n,
-                bigNumberIndex1 + 500n,
-                carol
-              ),
-              new RangeRecord(bigNumberIndex1 + 500n, bigNumberIndex2, alice),
-              new RangeRecord(bigNumberIndex2, bigNumberIndex3, bob)
-            ])
-          })
-          it('put to later', async () => {
-            await rangeStore.put(bigNumberIndex1 + 500n, bigNumberIndex2, carol)
-            const ranges = await rangeStore.get(
-              bigNumberIndex1,
-              bigNumberIndex3
-            )
-            expect(ranges).toEqual([
-              new RangeRecord(bigNumberIndex1, bigNumberIndex1 + 500n, alice),
-              new RangeRecord(bigNumberIndex1 + 500n, bigNumberIndex2, carol),
-              new RangeRecord(bigNumberIndex2, bigNumberIndex3, bob)
-            ])
-          })
-          it('put across', async () => {
-            await rangeStore.put(
-              bigNumberIndex1 + 500n,
-              bigNumberIndex2 + 500n,
-              carol
-            )
-            const ranges = await rangeStore.get(
-              bigNumberIndex1,
-              bigNumberIndex3
-            )
-            expect(ranges).toEqual([
-              new RangeRecord(bigNumberIndex1, bigNumberIndex1 + 500n, alice),
-              new RangeRecord(
-                bigNumberIndex1 + 500n,
-                bigNumberIndex2 + 500n,
-                carol
-              ),
-              new RangeRecord(bigNumberIndex2 + 500n, bigNumberIndex3, bob)
-            ])
-          })
-        })
-
-        describe('bucket', () => {
-          let bucketA: RangeStore
-          let bucketB: RangeStore
-          beforeEach(async () => {
-            bucketA = await rangeStore.bucket(Bytes.fromString('a'))
-            bucketB = await rangeStore.bucket(Bytes.fromString('b'))
-          })
-          it('buckets are independent', async () => {
-            await rangeStore.put(0n, 100n, alice)
-            await bucketA.put(100n, 200n, bob)
-            await bucketB.put(200n, 300n, carol)
-            const ranges = await rangeStore.get(0n, 300n)
-            const rangesA = await bucketA.get(0n, 300n)
-            const rangesB = await bucketB.get(0n, 300n)
-            expect(ranges).toEqual([new RangeRecord(0n, 100n, alice)])
-            expect(rangesA).toEqual([new RangeRecord(100n, 200n, bob)])
-            expect(rangesB).toEqual([new RangeRecord(200n, 300n, carol)])
-          })
-        })
+    describe.each([0n, 100n, 2n ** 34n])('PostgreSqlRangeDb: %p', baseStart => {
+      function testPut(store: RangeStore, s: bigint, e: bigint, value: Bytes) {
+        return store.put(baseStart + s, baseStart + e, value)
       }
-    )
+      function testGet(store: RangeStore, s: bigint, e: bigint) {
+        return store.get(baseStart + s, baseStart + e)
+      }
+      function testDel(store: RangeStore, s: bigint, e: bigint) {
+        return store.del(baseStart + s, baseStart + e)
+      }
+      function testRangeRecord(s: bigint, e: bigint, value: Bytes) {
+        return new RangeRecord(baseStart + s, baseStart + e, value)
+      }
+
+      describe.each(['rangedb', 'bucket'])(
+        'PostgreSqlRangeDb: %p',
+        testDbType => {
+          let rangeStore: RangeStore
+
+          beforeEach(async () => {
+            rangeStore = new PostgreSqlRangeDb(kvs)
+            if (testDbType == 'bucket') {
+              rangeStore = await rangeStore.bucket(
+                Bytes.fromString('test_bucket')
+              )
+            }
+          })
+
+          it('get ranges', async () => {
+            await testPut(rangeStore, 0n, 100n, alice)
+            await testPut(rangeStore, 100n, 200n, bob)
+            await testPut(rangeStore, 200n, 300n, carol)
+            const ranges = await testGet(rangeStore, 0n, 300n)
+            expect(ranges).toEqual([
+              testRangeRecord(0n, 100n, alice),
+              testRangeRecord(100n, 200n, bob),
+              testRangeRecord(200n, 300n, carol)
+            ])
+          })
+          it('get mid range', async () => {
+            await testPut(rangeStore, 0n, 100n, alice)
+            await testPut(rangeStore, 100n, 200n, bob)
+            await testPut(rangeStore, 200n, 300n, carol)
+            const ranges = await testGet(rangeStore, 100n, 150n)
+            expect(ranges).toEqual([testRangeRecord(100n, 200n, bob)])
+          })
+          it('get small range', async () => {
+            await testPut(rangeStore, 120n, 150n, alice)
+            await testPut(rangeStore, 0n, 20n, bob)
+            await testPut(rangeStore, 500n, 600n, carol)
+            const ranges = await testGet(rangeStore, 100n, 200n)
+            expect(ranges).toEqual([testRangeRecord(120n, 150n, alice)])
+          })
+          it('get large range', async () => {
+            await testPut(rangeStore, 0n, 500n, alice)
+            const ranges = await testGet(rangeStore, 100n, 200n)
+            expect(ranges).toEqual([testRangeRecord(0n, 500n, alice)])
+          })
+          it("don't get edge", async () => {
+            await testPut(rangeStore, 80n, 100n, alice)
+            const ranges = await testGet(rangeStore, 100n, 200n)
+            expect(ranges).toEqual([])
+          })
+          it('del ranges', async () => {
+            await testPut(rangeStore, 0n, 100n, alice)
+            await testPut(rangeStore, 100n, 200n, bob)
+            await testPut(rangeStore, 200n, 300n, carol)
+            await testDel(rangeStore, 0n, 300n)
+            const ranges = await testGet(rangeStore, 0n, 300n)
+            expect(ranges).toEqual([])
+          })
+          it('update range', async () => {
+            await testPut(rangeStore, 0n, 300n, alice)
+            await testPut(rangeStore, 100n, 200n, bob)
+            const ranges = await testGet(rangeStore, 0n, 300n)
+            expect(ranges).toEqual([
+              testRangeRecord(0n, 100n, alice),
+              testRangeRecord(100n, 200n, bob),
+              testRangeRecord(200n, 300n, alice)
+            ])
+          })
+
+          describe('get', () => {
+            it('get a range', async () => {
+              await testPut(rangeStore, 0n, 500n, alice)
+              const ranges = await testGet(rangeStore, 0n, 1000n)
+              expect(ranges).toEqual([testRangeRecord(0n, 500n, alice)])
+            })
+            it('get no ranges', async () => {
+              await testPut(rangeStore, 0n, 500n, alice)
+              const ranges = await testGet(rangeStore, 1000n, 2000n)
+              expect(ranges).toEqual([])
+            })
+            it('get no ranges edge case, later query', async () => {
+              await testPut(rangeStore, 0n, 500n, alice)
+              const ranges = await testGet(rangeStore, 500n, 1000n)
+              expect(ranges).toEqual([])
+            })
+            it('get no ranges edge case, fomer query', async () => {
+              await testPut(rangeStore, 500n, 1000n, alice)
+              const ranges = await testGet(rangeStore, 0n, 500n)
+              expect(ranges).toEqual([])
+            })
+            it('get ranges correctly', async () => {
+              await rangeStore.put(0x100n, 0x120n, alice)
+              await rangeStore.put(0x120n, 0x200n, bob)
+              await rangeStore.put(0x1000n, 0x1200n, carol)
+              const ranges = await rangeStore.get(0n, 0x2000n)
+              expect(ranges).toEqual([
+                new RangeRecord(0x100n, 0x120n, alice),
+                new RangeRecord(0x120n, 0x200n, bob),
+                new RangeRecord(0x1000n, 0x1200n, carol)
+              ])
+            })
+          })
+
+          describe('put', () => {
+            beforeEach(async () => {
+              await testPut(rangeStore, 0n, 1000n, alice)
+              await testPut(rangeStore, 1000n, 2000n, bob)
+            })
+            it('put to former', async () => {
+              await testPut(rangeStore, 0n, 500n, carol)
+              const ranges = await testGet(rangeStore, 0n, 2000n)
+              expect(ranges).toEqual([
+                testRangeRecord(0n, 500n, carol),
+                testRangeRecord(500n, 1000n, alice),
+                testRangeRecord(1000n, 2000n, bob)
+              ])
+            })
+            it('put to middle', async () => {
+              await testPut(rangeStore, 200n, 500n, carol)
+              const ranges = await testGet(rangeStore, 0n, 2000n)
+              expect(ranges).toEqual([
+                testRangeRecord(0n, 200n, alice),
+                testRangeRecord(200n, 500n, carol),
+                testRangeRecord(500n, 1000n, alice),
+                testRangeRecord(1000n, 2000n, bob)
+              ])
+            })
+            it('put to later', async () => {
+              await testPut(rangeStore, 500n, 1000n, carol)
+              const ranges = await testGet(rangeStore, 0n, 2000n)
+              expect(ranges).toEqual([
+                testRangeRecord(0n, 500n, alice),
+                testRangeRecord(500n, 1000n, carol),
+                testRangeRecord(1000n, 2000n, bob)
+              ])
+            })
+            it('put across', async () => {
+              await testPut(rangeStore, 500n, 1500n, carol)
+              const ranges = await testGet(rangeStore, 0n, 2000n)
+              expect(ranges).toEqual([
+                testRangeRecord(0n, 500n, alice),
+                testRangeRecord(500n, 1500n, carol),
+                testRangeRecord(1500n, 2000n, bob)
+              ])
+            })
+          })
+
+          describe('bucket', () => {
+            let bucketA: RangeStore
+            let bucketB: RangeStore
+            beforeEach(async () => {
+              bucketA = await rangeStore.bucket(Bytes.fromString('a'))
+              bucketB = await rangeStore.bucket(Bytes.fromString('b'))
+            })
+            it('buckets are independent', async () => {
+              await testPut(rangeStore, 0n, 100n, alice)
+              await testPut(bucketA, 100n, 200n, bob)
+              await testPut(bucketB, 200n, 300n, carol)
+              const ranges = await testGet(rangeStore, 0n, 300n)
+              const rangesA = await testGet(bucketA, 0n, 300n)
+              const rangesB = await testGet(bucketB, 0n, 300n)
+              expect(ranges).toEqual([testRangeRecord(0n, 100n, alice)])
+              expect(rangesA).toEqual([testRangeRecord(100n, 200n, bob)])
+              expect(rangesB).toEqual([testRangeRecord(200n, 300n, carol)])
+            })
+          })
+        }
+      )
+    })
   })
 })
