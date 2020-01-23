@@ -1,15 +1,12 @@
 import { Client } from 'pg'
 import {
-  ByteUtils,
   PostgreSqlKeyValueStore,
   PostgreSqlIterator
 } from './PostgreSqlKeyValueStore'
 import { PostgreSqlRangeDb } from './PostgreSqlRangeDb'
-import { Bytes, BigNumber } from 'wakkanay/dist/types/Codables'
-import { RangeRecord } from 'wakkanay/dist/db/RangeStore'
-import { KeyValueStore } from 'wakkanay/dist/db'
+import { Bytes } from '@cryptoeconomicslab/primitives'
+import { KeyValueStore, RangeRecord } from '@cryptoeconomicslab/db'
 
-const testDbName = Bytes.fromString('test_pg')
 const testBucket = Bytes.fromString('test_bucket')
 const testKey = Bytes.fromString('test_key')
 const testNotFoundKey = Bytes.fromString('test_not_found_key')

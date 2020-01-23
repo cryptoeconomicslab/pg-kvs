@@ -1,7 +1,6 @@
 import { Client } from 'pg'
-import * as wakkanay from 'wakkanay'
-import { Bytes } from 'wakkanay/dist/types/Codables'
-import { BatchOperation, Iterator } from 'wakkanay/dist/db/KeyValueStore'
+import { Bytes } from '@cryptoeconomicslab/primitives'
+import { KeyValueStore, BatchOperation, Iterator } from '@cryptoeconomicslab/db'
 
 export class ByteUtils {
   public static bytesToBuffer(value: Bytes): Buffer {
@@ -59,7 +58,7 @@ export class PostgreSqlIterator implements Iterator {
   }
 }
 
-export class PostgreSqlKeyValueStore implements wakkanay.db.KeyValueStore {
+export class PostgreSqlKeyValueStore implements KeyValueStore {
   client: Client
   rootBucket: PostgreSqlBucket
   static defaultBucketName = Bytes.fromString('root')
@@ -100,12 +99,12 @@ export class PostgreSqlKeyValueStore implements wakkanay.db.KeyValueStore {
   iter(lowerBound: Bytes, lowerBoundExclusive?: boolean | undefined): Iterator {
     return this.rootBucket.iter(lowerBound, lowerBoundExclusive)
   }
-  async bucket(key: Bytes): Promise<wakkanay.db.KeyValueStore> {
+  async bucket(key: Bytes): Promise<KeyValueStore> {
     return this.rootBucket.bucket(key)
   }
 }
 
-export class PostgreSqlBucket implements wakkanay.db.KeyValueStore {
+export class PostgreSqlBucket implements KeyValueStore {
   close(): Promise<void> {
     throw new Error('Method not implemented.')
   }
@@ -189,7 +188,7 @@ export class PostgreSqlBucket implements wakkanay.db.KeyValueStore {
       lowerBoundExclusive !== undefined ? lowerBoundExclusive : true
     )
   }
-  async bucket(key: Bytes): Promise<wakkanay.db.KeyValueStore> {
+  async bucket(key: Bytes): Promise<KeyValueStore> {
     return new PostgreSqlBucket(this.db, Bytes.concat(this.bucketName, key))
   }
 }
