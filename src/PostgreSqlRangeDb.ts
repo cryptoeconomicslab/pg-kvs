@@ -1,8 +1,6 @@
 import { Client } from 'pg'
-import * as wakkanay from 'wakkanay'
-import { Bytes } from 'wakkanay/dist/types/Codables'
-import { RangeDb } from 'wakkanay/dist/db'
-import { RangeRecord, RangeStore } from 'wakkanay/dist/db/RangeStore'
+import { Bytes } from '@cryptoeconomicslab/primitives'
+import { RangeRecord, RangeStore, RangeDb } from '@cryptoeconomicslab/db'
 import { ByteUtils, PostgreSqlKeyValueStore } from './PostgreSqlKeyValueStore'
 
 const bigintToBuffer = (n: bigint): Buffer => {
@@ -72,7 +70,7 @@ export class PostgreSqlRangeDb implements RangeStore {
       [this.bucketName, bigintToBuffer(start), bigintToBuffer(end)]
     )
   }
-  async bucket(key: Bytes): Promise<wakkanay.db.RangeStore> {
+  async bucket(key: Bytes): Promise<RangeStore> {
     return new PostgreSqlRangeDb(this.kvs, Bytes.concat(this.bucketName, key))
   }
   private async putOneRange(
