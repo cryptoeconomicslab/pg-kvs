@@ -1,6 +1,6 @@
 {
-  "name": "wakkanay-db-pg",
-  "version": "1.0.0",
+  "name": "@cryptoeconomicslab/postgres-kvs",
+  "version": "0.0.1",
   "description": "",
   "main": "dist/index.js",
   "files": [
@@ -16,7 +16,7 @@
     "plasma"
   ],
   "author": "",
-  "license": "ISC",
+  "license": "Apache-2.0",
   "dependencies": {
     "@cryptoeconomicslab/db": "^0.0.6",
     "pg": "^7.12.1"
