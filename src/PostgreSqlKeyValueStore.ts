@@ -18,20 +18,21 @@ export class PostgreSqlIterator implements Iterator {
     private db: PostgreSqlKeyValueStore,
     private bucketName: Bytes,
     private bound: Bytes,
-    private lowerBoundExclusive: boolean,
+    private lowerBoundExclusive?: boolean,
     private limit: number = 10
   ) {}
 
   public async next(): Promise<{ key: Bytes; value: Bytes } | null> {
-    if (this.buffer.length == 0) {
+    if (this.buffer.length === 0) {
       this.buffer = await this.fetch(
-        this.isFirstFetch && this.lowerBoundExclusive
+        this.isFirstFetch && !this.lowerBoundExclusive
       )
       this.isFirstFetch = false
       if (this.buffer.length > 0) {
         this.bound = this.buffer[this.buffer.length - 1].key
       }
     }
+
     const result = this.buffer.shift()
     return result ? result : null
   }
@@ -140,7 +141,7 @@ export class PostgreSqlBucket implements KeyValueStore {
   }
   async del(key: Bytes): Promise<void> {
     await this.db.client.query(
-      'DELETE FROM kvs WHERE bucket = $1 AND key = $1',
+      'DELETE FROM kvs WHERE bucket = $1 AND key = $2',
       [ByteUtils.bytesToBuffer(this.bucketName), ByteUtils.bytesToBuffer(key)]
     )
   }
@@ -159,7 +160,7 @@ export class PostgreSqlBucket implements KeyValueStore {
             )
           } else if (op.type === 'Del') {
             await this.db.client.query(
-              'DELETE * FROM kvs WHERE bucket = $1 AND key = $1',
+              'DELETE FROM kvs WHERE bucket = $1 AND key = $2',
               [
                 ByteUtils.bytesToBuffer(this.bucketName),
                 ByteUtils.bytesToBuffer(op.key)
@@ -180,12 +181,12 @@ export class PostgreSqlBucket implements KeyValueStore {
       // What should we do finally?
     }
   }
-  iter(lowerBound: Bytes, lowerBoundExclusive?: boolean | undefined): Iterator {
+  iter(lowerBound: Bytes, lowerBoundExclusive?: boolean): Iterator {
     return new PostgreSqlIterator(
       this.db,
       this.bucketName,
       lowerBound,
-      lowerBoundExclusive !== undefined ? lowerBoundExclusive : true
+      lowerBoundExclusive
     )
   }
   async bucket(key: Bytes): Promise<KeyValueStore> {
