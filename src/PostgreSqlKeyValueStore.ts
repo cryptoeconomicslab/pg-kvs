@@ -131,7 +131,7 @@ export class PostgreSqlBucket implements KeyValueStore {
   }
   async put(key: Bytes, value: Bytes): Promise<void> {
     await this.db.client.query(
-      'INSERT INTO kvs(bucket, key, value) VALUES($1, $2, $3)',
+      'INSERT INTO kvs(bucket, key, value) VALUES($1, $2, $3) ON CONFLICT (bucket, key) DO UPDATE SET value = $3',
       [
         ByteUtils.bytesToBuffer(this.bucketName),
         ByteUtils.bytesToBuffer(key),

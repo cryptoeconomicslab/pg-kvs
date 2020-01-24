@@ -35,6 +35,14 @@ describe('PostgreSqlKeyValueStore', () => {
     expect(value).toEqual(testValue)
   })
 
+  it('upsert to already existing key', async () => {
+    await kvs.put(testKey, testValue)
+    const testValue2 = Bytes.fromString('test_value2')
+    await kvs.put(testKey, testValue2)
+    const value = await kvs.get(testKey)
+    expect(value).toEqual(testValue2)
+  })
+
   it('get null', async () => {
     const value = await kvs.get(testNotFoundKey)
     expect(value).toBeNull()
